@@ -86,7 +86,7 @@ body.edit .ctl{border:3px dashed #ffeb3b;background:rgba(255,235,59,.3)}
 <button class="big" id="hs" disabled>🎮 خش العب</button></div>
 <div class="scr" id="join"><button class="big sm back" id="jb">↩️ رجوع</button><h1 style="font-size:26px">ادخل غرفة 📲</h1>
 <div class="card" style="width:340px;text-align:center"><div id="jst" class="note2" style="font-size:16px"></div>
-<div id="man" style="display:none"><div class="step">اكتب عنوان المضيف (بيظهر عنده فوق)</div><input id="ipf" placeholder="مثال 192.168.43.1" inputmode="decimal"><br><button class="big sm" id="bm">اتصال</button></div>
+<div id="man" style="margin-top:6px"><div class="step">اكتب عنوان المضيف (بيظهر عنده فوق)</div><input id="ipf" placeholder="مثال 192.168.43.1" inputmode="decimal"><br><button class="big sm" id="bm">اتصال</button></div>
 <button class="big sm alt" id="jr">🔄 دوّر تاني</button></div></div>
 <div id="toast"></div>
 <div id="rot">📱 لف الموبايل بالعرض 🔄</div>
@@ -418,18 +418,21 @@ function hostGo(){const w=wsx();if(!w){alert('وضع الاستضافة بيشت
  w.stop(go,go);
  function go(){w.start(PORT,{onFailure:(a,p,r)=>{$('lst').textContent='السيرفر وقف: '+r},onOpen:()=>{},onMessage:srvMsg,onClose:srvClose},
   ()=>{connect('127.0.0.1');ownIps(ips=>{HOSTIPS=ips;drawLobby()})},e=>{$('lst').textContent='فشل تشغيل السيرفر: '+e})}}
-// ---- اللاعب: يدوّر على المضيف لوحده ----
-function probe(a,ms,cb){let done=false,s,t;const fin=r=>{if(done)return;done=true;clearTimeout(t);try{s.close()}catch(e){}cb(r)};
- try{s=new WebSocket('ws://'+a+':'+PORT)}catch(e){return cb(false)}t=setTimeout(()=>fin(false),ms);s.onopen=()=>fin(true);s.onerror=()=>fin(false)}
-function race(L,conc,ms,cb){let idx=0,act=0,done=false;if(!L.length)return cb(null);
- const pump=()=>{while(act<conc&&idx<L.length&&!done){((a)=>{act++;probe(a,ms,ok=>{act--;if(done)return;if(ok){done=true;return cb(a)}if(idx>=L.length&&act===0){done=true;return cb(null)}pump()})})(L[idx++])}};pump()}
-function find(cb){bases(bs=>{let q=[];if(localStorage.klast)q.push(localStorage.klast);bs.forEach(b=>q.push(b+'.1'));['192.168.43.1','192.168.49.1','192.168.137.1','172.20.10.1'].forEach(a=>q.push(a));
- q=q.filter((x,i)=>x!=='127.0.0.1'&&q.indexOf(x)===i);
- race(q,12,3000,a=>{if(a||!bs.length)return cb(a);const L=[];bs.forEach(b=>{for(let i=2;i<255;i++)L.push(b+'.'+i)});jst('بعمل بحث شامل...');race(L,40,2500,cb)})})}
+// ---- اللاعب: يدوّر على المضيف لوحده (سريع: كل العناوين بالتوازي) ----
 const jst=t=>{$('jst').textContent=t};
-function joinGo(r){r=r||1;const tk=joinTok;jst('بدوّر على الجهاز اللي فاتح النقطة... (محاولة '+r+' من 3)');$('man').style.display='none';
- find(a=>{if(tk!==joinTok)return;if(a)connect(a);else if(r<3)setTimeout(()=>{if(tk===joinTok)joinGo(r+1)},1500);
-  else{jst('مالقيتش المضيف. اتأكد إنك متصل بالهوت سبوت وإن المضيف داس "أنا فاتح النقطة"، أو اكتب العنوان بإيدك.');$('man').style.display='block'}})}
+function probe(a,ms,cb){let done=false,s,t;const fin=r=>{if(done)return;done=true;clearTimeout(t);try{s.close()}catch(e){}cb(r)};
+ try{s=new WebSocket('ws://'+a+':'+PORT)}catch(e){return cb(false)}t=setTimeout(()=>fin(false),ms);s.onopen=()=>fin(true);s.onerror=()=>fin(false);s.onclose=()=>fin(false)}
+function findAll(tk,cb,prog){ownIps(own=>{bases(bs=>{
+ const pri=[];if(localStorage.klast)pri.push(localStorage.klast);bs.forEach(b=>pri.push(b+'.1'));['192.168.43.1','192.168.49.1','192.168.137.1','172.20.10.1'].forEach(a=>pri.push(a));
+ const L=[],seen={},add=a=>{if(a==='127.0.0.1'||seen[a]||own.indexOf(a)>=0)return;seen[a]=1;L.push(a)};
+ pri.forEach(add);bs.forEach(b=>{for(let i=2;i<255;i++)add(b+'.'+i)});
+ if(!L.length)return cb(null);
+ let idx=0,act=0,done=0,fin=false;const total=L.length,np=pri.length;
+ const pump=()=>{while(!fin&&act<60&&idx<L.length){const a=L[idx++];act++;probe(a,idx<=np?1800:1200,ok=>{act--;done++;if(fin||tk!==joinTok){fin=true;return}
+  if(ok){fin=true;return cb(a)}if(prog)prog(Math.round(done/total*100));if(done>=total){fin=true;return cb(null)}pump()})}};pump()})})}
+function joinGo(r){r=r||1;const tk=joinTok;jst('⏳ بدوّر على المضيف... (ممكن تكتب العنوان بإيدك تحت)');
+ findAll(tk,a=>{if(tk!==joinTok)return;if(a)connect(a);else if(r<2)setTimeout(()=>{if(tk===joinTok)joinGo(r+1)},600);
+  else jst('مالقيتش المضيف. اتأكد إنك متصل بالهوت سبوت وإن المضيف داس "أنا فاتح النقطة"، أو اكتب العنوان تحت.')},p=>{if(tk===joinTok)jst('⏳ بدوّر على المضيف... '+p+'%')})}
 // ---- الاتصال (المضيف بيتصل بنفسه على 127.0.0.1) ----
 function connect(addr){curAddr=addr;if(addr!=='127.0.0.1')localStorage.klast=addr;let s;try{s=new WebSocket('ws://'+addr+':'+PORT)}catch(e){jst('❌ عنوان غلط');return}
  ws=s;let ok=false;
@@ -472,7 +475,7 @@ $('nh').onclick=()=>{if(myName())hostGo()};
 $('nj').onclick=()=>{if(myName()){NET.role='guest';joinTok++;scr('join');joinGo()}};
 $('lb2').onclick=()=>{netClose();scr('net')};$('jb').onclick=()=>{netClose();scr('net')};
 $('jr').onclick=()=>{joinTok++;joinGo()};
-$('bm').onclick=()=>{const a=$('ipf').value.trim();if(a){jst('بتصل...');connect(a)}};
+$('bm').onclick=()=>{const a=$('ipf').value.trim();if(a){joinTok++;jst('بتصل بـ '+a+'...');connect(a)}};
 $('hs').onclick=()=>hostStart();
 $('hl').addEventListener('click',e=>{const t=e.target.closest('button');if(t&&t.dataset.k)out({k:'kick',uid:t.dataset.k})});
 let t0=0;
